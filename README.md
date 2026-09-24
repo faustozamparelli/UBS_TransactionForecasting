@@ -31,6 +31,8 @@ future forecasting / anomaly model (not implemented)
 [`data/dataset_features.zip`](data/dataset_features.zip) contains the train,
 validation, and test CSVs. Alongside the original transaction information, it adds:
 
+- **Text normalization:** `clean_description` field that strips noise, dates, and alphanumeric IDs so the LLM/Embedding model focuses strictly on semantic meaning.
+- **Full sequence retention:** 100% of the transactions (including incoming, ATM, and noise) are kept in chronological order. We do not drop rows, ensuring the AI can learn temporal correlations across the client's entire transaction history.
 - **Calendar context:** weekday, day of month, month, and days to the cutoff date.
 - **Recent activity:** time since the client's previous transaction.
 - **Recurring-family history:** time since the previous similar transaction, prior
