@@ -41,6 +41,8 @@ def main() -> None:
         assert rows.dense_features.shape == (row_count, preprocessor.dense_dimension)
         assert np.isfinite(rows.description_embeddings).all()
         assert np.isfinite(rows.dense_features).all()
+        order = np.lexsort((rows.timestamps_ns, rows.client_ids.astype(str)))
+        assert np.array_equal(order, np.arange(row_count)), "rows are not ordered by client/time"
         for column, cardinality in enumerate(cardinalities):
             indices = rows.categorical_indices[:, column]
             assert (indices >= 0).all() and (indices < cardinality).all()
@@ -68,4 +70,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

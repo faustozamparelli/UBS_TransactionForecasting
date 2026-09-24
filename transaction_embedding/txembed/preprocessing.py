@@ -89,10 +89,21 @@ class TransactionPreprocessor:
         self._require_fitted()
         self._validate_columns(frame)
 
+        # Persist every artifact in deterministic client/time order. The stable
+        # input-position tie breaker also makes equal timestamps reproducible.
+        frame = frame.copy()
+        frame["_input_order"] = np.arange(len(frame), dtype=np.int64)
+        frame["_parsed_timestamp"] = pd.to_datetime(
+            frame[self.schema.timestamp], utc=True, errors="raise"
+        )
+        frame = frame.sort_values(
+            [self.schema.client_id, "_parsed_timestamp", "_input_order"], kind="stable"
+        ).reset_index(drop=True)
+
         if frame[self.schema.client_id].isna().any():
             raise ValueError("client_id contains missing values")
 
-        timestamps = pd.to_datetime(frame[self.schema.timestamp], utc=True, errors="raise")
+        timestamps = frame["_parsed_timestamp"]
         if timestamps.isna().any():
             raise ValueError("timestamp contains missing values")
 

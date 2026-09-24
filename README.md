@@ -15,7 +15,9 @@ The feature dataset and transaction embedding pipeline are complete. The forecas
 and alerting model has **not** been implemented yet.
 
 ```text
-cleaned transactions
+raw JSONL transactions
+        ↓
+cleaning + feature engineering
         ↓
 added calendar and history features
         ↓
@@ -28,8 +30,9 @@ future forecasting / anomaly model (not implemented)
 
 ## Dataset and added features
 
-[`data/dataset_features.zip`](data/dataset_features.zip) contains the train,
-validation, and test CSVs. Alongside the original transaction information, it adds:
+[`data/dataset_features.zip`](data/dataset_features.zip) contains the cleaned train,
+validation, and test CSVs plus labels and the submission template. Alongside all
+original transaction fields, it adds:
 
 - **Text normalization:** `clean_description` field that strips noise, dates, and alphanumeric IDs so the LLM/Embedding model focuses strictly on semantic meaning.
 - **Full sequence retention:** 100% of the transactions (including incoming, ATM, and noise) are kept in chronological order. We do not drop rows, ensuring the AI can learn temporal correlations across the client's entire transaction history.
@@ -47,6 +50,10 @@ arrives on the wrong day, after an unexpected interval, or from an unfamiliar fa
 The extracted `data/dataset_features/` folder remains ignored to avoid storing the
 same data twice.
 
+The cleaning source lives in [`dataset_cleaning/`](dataset_cleaning/README.md). Run
+`python dataset_cleaning/clean_dataset.py` to rebuild both the extracted CSVs and ZIP
+from `data/dataset/`.
+
 ## Transaction embedding
 
 The embedding combines a frozen text representation of the description, learned
@@ -57,4 +64,3 @@ sorted oldest-to-newest, so a client with 80 transactions becomes `[80, 128]`.
 Training-only statistics and category dictionaries are reused for validation and
 test, preventing data leakage. See the concise implementation guide in
 [`transaction_embedding/`](transaction_embedding/README.md).
-

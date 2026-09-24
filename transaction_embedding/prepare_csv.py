@@ -9,11 +9,13 @@ from txembed import DescriptionEmbeddingCache, TransactionPreprocessor
 
 
 def main() -> None:
+    repository = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description="Fit train-only preprocessing and cache CSV features")
-    parser.add_argument("--train-csv", required=True, type=Path)
-    parser.add_argument("--valid-csv", type=Path)
-    parser.add_argument("--test-csv", type=Path)
-    parser.add_argument("--output-dir", required=True, type=Path)
+    cleaned = repository / "data" / "dataset_features"
+    parser.add_argument("--train-csv", type=Path, default=cleaned / "train_features.csv")
+    parser.add_argument("--valid-csv", type=Path, default=cleaned / "valid_features.csv")
+    parser.add_argument("--test-csv", type=Path, default=cleaned / "test_features.csv")
+    parser.add_argument("--output-dir", type=Path, default=Path(__file__).parent / "artifacts")
     parser.add_argument("--cache", type=Path, help="Defaults to OUTPUT_DIR/descriptions.sqlite")
     parser.add_argument("--device", help="Sentence Transformer device, e.g. cpu, cuda, or mps")
     args = parser.parse_args()
@@ -36,4 +38,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

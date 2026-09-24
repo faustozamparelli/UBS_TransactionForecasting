@@ -6,8 +6,9 @@ this implementation.
 
 ## What goes into one transaction
 
-- **Description:** frozen `all-MiniLM-L6-v2` produces a cached 384d text vector; a
-  trainable layer reduces it to 64d.
+- **Description:** the cleaner's `clean_description` is passed to frozen
+  `all-MiniLM-L6-v2`, producing a cached 384d text vector; a trainable layer reduces
+  it to 64d.
 - **Categories:** learned embeddings for recurring family, MCC, transaction type,
   currency, and direction.
 - **Numbers:** amount and history values use `log1p` where appropriate, then training
@@ -40,25 +41,29 @@ splits have no clients in common.
 
 ## Build and validate
 
-From this directory:
+First rebuild the cleaned dataset from the repository root:
+
+```bash
+python dataset_cleaning/clean_dataset.py
+```
+
+Then, from this directory:
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
 
-python prepare_csv.py \
-  --train-csv ../data/dataset_features/train_features.csv \
-  --valid-csv ../data/dataset_features/valid_features.csv \
-  --test-csv ../data/dataset_features/test_features.csv \
-  --output-dir artifacts
+python prepare_csv.py
 
 pytest -q
 python validate_artifacts.py --artifact-dir artifacts
 ```
 
 Descriptions are cached in SQLite and processed arrays are cached as compressed
-`.npz` files. The generated `artifacts/` directory is ignored by Git.
+`.npz` files. Rows in every artifact are deterministically ordered by client and
+timestamp (with original row order breaking timestamp ties). The generated
+`artifacts/` directory is ignored by Git.
 
 The current dataset produces:
 

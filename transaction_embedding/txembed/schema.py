@@ -14,7 +14,8 @@ class FeatureSchema:
 
     client_id: str = "client_id"
     timestamp: str = "timestamp"
-    description: str = "description"
+    # Embed the normalized semantic text produced by dataset_cleaning.
+    description: str = "clean_description"
     boolean: str = "is_recurring_candidate"
 
     categorical: tuple[str, ...] = (
@@ -93,4 +94,3 @@ class FeatureSchema:
             "calendar_offsets",
         }
         return cls(**{key: tuple(value) if key in tuple_fields else value for key, value in data.items()})
-

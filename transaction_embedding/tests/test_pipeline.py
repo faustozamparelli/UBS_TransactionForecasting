@@ -42,7 +42,8 @@ def frame() -> pd.DataFrame:
             "timestamp": ["2025-01-01T11:00:00Z", "2025-01-02T10:00:00Z", "2025-01-01T10:00:00Z"],
             "amount": [10.0, 20.0, 12.0],
             "mcc": [5411, 5812, 5411],
-            "description": ["Market", "Coffee", "Market"],
+            "description": ["Market 123", "Coffee 456", "Market 789"],
+            "clean_description": ["Market", "Coffee", "Market"],
             "candidate_family": ["groceries", "coffee", "groceries"],
             "is_recurring_candidate": [False, True, False],
             "type": ["card", "card", "card"],
@@ -78,8 +79,11 @@ def test_end_to_end_shape_mask_unknown_and_artifact_roundtrip(tmp_path):
     features = preprocessor.transform(validation, cache)
     cached_market = cache.encode(["Market"])
     assert fake_encoder.calls == 1  # the second request came from SQLite
+    # Transform artifacts are ordered by client and timestamp, regardless of input order.
+    assert features.client_ids.tolist() == ["a", "a", "b"]
+    assert (features.timestamps_ns[1:] >= features.timestamps_ns[:-1]).all()
     assert np.array_equal(cached_market[0], features.description_embeddings[0])
-    assert features.categorical_indices[0, 3] == 0
+    assert features.categorical_indices[1, 3] == 0
     assert features.dense_features.shape == (3, 23)
 
     features_path = tmp_path / "features.npz"
