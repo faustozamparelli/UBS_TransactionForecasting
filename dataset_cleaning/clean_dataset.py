@@ -128,7 +128,6 @@ def clean_transactions(frame: pd.DataFrame) -> pd.DataFrame:
             result["mcc"], result["description"], result["amount"], strict=True
         )
     ]
-    result["is_recurring_candidate"] = result["candidate_family"].ne("none").astype("int8")
     result["day_of_week"] = result["timestamp"].dt.dayofweek
     result["day_of_month"] = result["timestamp"].dt.day
     result["month"] = result["timestamp"].dt.month
@@ -172,7 +171,6 @@ def clean_transactions(frame: pd.DataFrame) -> pd.DataFrame:
     added_columns = [
         "clean_description",
         "candidate_family",
-        "is_recurring_candidate",
         "day_of_week",
         "day_of_month",
         "month",

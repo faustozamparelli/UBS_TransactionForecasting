@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 
 from txembed import (
     DescriptionEmbeddingCache,
+    FeatureSchema,
     TransactionEncoder,
     TransactionPreprocessor,
     TransactionSequenceDataset,
@@ -41,6 +42,7 @@ def frame() -> pd.DataFrame:
             "client_id": ["a", "b", "a"],
             "timestamp": ["2025-01-01T11:00:00Z", "2025-01-02T10:00:00Z", "2025-01-01T10:00:00Z"],
             "amount": [10.0, 20.0, 12.0],
+            "fee": [0.0, 0.1, 0.2],
             "mcc": [5411, 5812, 5411],
             "description": ["Market 123", "Coffee 456", "Market 789"],
             "clean_description": ["Market", "Coffee", "Market"],
@@ -84,7 +86,7 @@ def test_end_to_end_shape_mask_unknown_and_artifact_roundtrip(tmp_path):
     assert (features.timestamps_ns[1:] >= features.timestamps_ns[:-1]).all()
     assert np.array_equal(cached_market[0], features.description_embeddings[0])
     assert features.categorical_indices[1, 3] == 0
-    assert features.dense_features.shape == (3, 23)
+    assert features.dense_features.shape == (3, 22)
 
     features_path = tmp_path / "features.npz"
     features.save_npz(features_path)
@@ -102,3 +104,29 @@ def test_end_to_end_shape_mask_unknown_and_artifact_roundtrip(tmp_path):
     assert padding_mask.shape == (2, 2)
     assert padding_mask.sum().item() == 1
     assert torch.count_nonzero(embedded[padding_mask]).item() == 0
+
+
+def test_cleaned_and_uncleaned_text_keep_identical_rows_and_features(tmp_path):
+    source = frame()
+    cleaned_encoder = FakeEncoder()
+    uncleaned_encoder = FakeEncoder()
+    cleaned_cache = DescriptionEmbeddingCache(
+        tmp_path / "cleaned.sqlite", encoder_factory=lambda _name: cleaned_encoder
+    )
+    uncleaned_cache = DescriptionEmbeddingCache(
+        tmp_path / "uncleaned.sqlite", encoder_factory=lambda _name: uncleaned_encoder
+    )
+
+    cleaned = TransactionPreprocessor(
+        FeatureSchema(description="clean_description")
+    ).fit_transform(source, cleaned_cache)
+    uncleaned = TransactionPreprocessor(
+        FeatureSchema(description="description")
+    ).fit_transform(source, uncleaned_cache)
+
+    assert len(cleaned) == len(uncleaned) == len(source)
+    assert np.array_equal(cleaned.client_ids, uncleaned.client_ids)
+    assert np.array_equal(cleaned.timestamps_ns, uncleaned.timestamps_ns)
+    assert np.array_equal(cleaned.categorical_indices, uncleaned.categorical_indices)
+    assert np.array_equal(cleaned.dense_features, uncleaned.dense_features)
+    assert not np.array_equal(cleaned.description_embeddings, uncleaned.description_embeddings)

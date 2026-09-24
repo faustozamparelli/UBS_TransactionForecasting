@@ -122,9 +122,8 @@ class TransactionPreprocessor:
 
         continuous, missing_flags = self._continuous_values(frame)
         standardized = (continuous - self.means) / self.stds
-        boolean = self._boolean_values(frame[self.schema.boolean])[:, None]
         cyclic = self._cyclic_values(frame)
-        dense = np.concatenate([boolean, standardized, cyclic, missing_flags], axis=1).astype(np.float32)
+        dense = np.concatenate([standardized, cyclic, missing_flags], axis=1).astype(np.float32)
 
         if dense.shape[1] != self.dense_dimension:
             raise RuntimeError(f"Dense feature mismatch: expected {self.dense_dimension}, got {dense.shape[1]}")
@@ -149,7 +148,7 @@ class TransactionPreprocessor:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
-            "version": 1,
+            "version": 2,
             "schema": self.schema.to_dict(),
             "vocabularies": self.vocabularies,
             "means": self.means.tolist(),
@@ -160,8 +159,11 @@ class TransactionPreprocessor:
     @classmethod
     def load(cls, path: str | Path) -> "TransactionPreprocessor":
         payload: dict[str, Any] = json.loads(Path(path).read_text(encoding="utf-8"))
-        if payload.get("version") != 1:
-            raise ValueError(f"Unsupported preprocessing artifact version: {payload.get('version')}")
+        if payload.get("version") != 2:
+            raise ValueError(
+                f"Unsupported preprocessing artifact version: {payload.get('version')}. "
+                "Regenerate cleaned and uncleaned artifacts with the current scripts."
+            )
         instance = cls(FeatureSchema.from_dict(payload["schema"]))
         instance.vocabularies = payload["vocabularies"]
         instance.means = np.asarray(payload["means"], dtype=np.float32)
@@ -217,25 +219,6 @@ class TransactionPreprocessor:
     @staticmethod
     def _categorical_values(series: pd.Series) -> pd.Series:
         return series.astype("string").fillna("").str.strip()
-
-    @staticmethod
-    def _boolean_values(series: pd.Series) -> np.ndarray:
-        mapping = {
-            "0": 0.0,
-            "0.0": 0.0,
-            "false": 0.0,
-            "no": 0.0,
-            "1": 1.0,
-            "1.0": 1.0,
-            "true": 1.0,
-            "yes": 1.0,
-        }
-        normalized = series.astype("string").str.strip().str.lower()
-        result = normalized.map(mapping)
-        if result.isna().any():
-            bad = sorted(normalized[result.isna()].dropna().unique().tolist())
-            raise ValueError(f"is_recurring_candidate has invalid values: {bad}")
-        return result.to_numpy(dtype=np.float32)
 
     def _validate_columns(self, frame: pd.DataFrame) -> None:
         missing = sorted(set(self.schema.required_columns) - set(frame.columns))

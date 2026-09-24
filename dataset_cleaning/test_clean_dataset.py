@@ -30,5 +30,6 @@ def test_cleaner_retains_rows_and_fields_adds_features_and_orders() -> None:
     assert cleaned["fee"].tolist() == [0.2, 0.1, 0.0]
     assert cleaned["clean_description"].tolist() == ["cloud backup", "cloud backup", "coffee shop"]
     assert cleaned["candidate_family"].tolist() == ["cloud", "cloud", "none"]
+    assert "is_recurring_candidate" not in cleaned
     assert cleaned.loc[1, "days_since_prev_same_family"] == 2.0
     assert "amount_vs_family_median" in cleaned

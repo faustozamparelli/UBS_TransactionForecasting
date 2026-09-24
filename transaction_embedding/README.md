@@ -11,8 +11,8 @@ this implementation.
   it to 64d.
 - **Categories:** learned embeddings for recurring family, MCC, transaction type,
   currency, and direction.
-- **Numbers:** amount and history values use `log1p` where appropriate, then training
-  mean/std normalization.
+- **Numbers:** amount and recurrence-history values use `log1p` where appropriate,
+  then training mean/std normalization.
 - **Time:** weekday, day of month, and month use sine/cosine values so calendar cycles
   wrap around naturally.
 - **Missing history:** unavailable history is filled with zero and paired with a flag
@@ -47,18 +47,41 @@ First rebuild the cleaned dataset from the repository root:
 python dataset_cleaning/clean_dataset.py
 ```
 
-Then, from this directory:
+Then, from this directory, generate both comparable variants:
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
 
-python prepare_csv.py
+python generate_cleaned_embeddings.py
+python generate_uncleaned_embeddings.py
 
 pytest -q
-python validate_artifacts.py --artifact-dir artifacts
+python validate_artifacts.py --artifact-dir artifacts/cleaned
+python validate_artifacts.py --artifact-dir artifacts/uncleaned
 ```
+
+Both scripts read the same feature CSVs, retain every row, and use the same selected
+model features. The only difference is the text passed to MiniLM:
+
+- `generate_cleaned_embeddings.py` embeds `clean_description` and writes to
+  `artifacts/cleaned/`.
+- `generate_uncleaned_embeddings.py` embeds the original `description` (including
+  dates and identifiers) and writes to `artifacts/uncleaned/`.
+
+This makes the two artifact sets directly comparable. Each script checks its output
+row count against the source CSV and fails if any transaction was removed. The old
+`prepare_csv.py` command remains available for backward compatibility.
+
+The model intentionally excludes `fee`, which is overwhelmingly zero and is not a
+merchant-family signal. It also excludes the old `is_recurring_candidate` flag
+because it exactly duplicates whether `candidate_family` is `none`. The original
+raw fields remain in the feature CSVs; both embedding variants use the same reduced
+model schema.
+
+Artifacts created by the older schema must be regenerated; its dense vectors
+included the redundant flag and are intentionally rejected by the current loader.
 
 Descriptions are cached in SQLite and processed arrays are cached as compressed
 `.npz` files. Rows in every artifact are deterministically ordered by client and

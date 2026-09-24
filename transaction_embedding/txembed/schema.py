@@ -16,7 +16,6 @@ class FeatureSchema:
     timestamp: str = "timestamp"
     # Embed the normalized semantic text produced by dataset_cleaning.
     description: str = "clean_description"
-    boolean: str = "is_recurring_candidate"
 
     categorical: tuple[str, ...] = (
         "candidate_family",
@@ -65,7 +64,6 @@ class FeatureSchema:
             self.client_id,
             self.timestamp,
             self.description,
-            self.boolean,
             *self.categorical,
             *self.continuous,
             *self.calendar,
@@ -75,7 +73,7 @@ class FeatureSchema:
     def dense_feature_names(self) -> tuple[str, ...]:
         cyclic = tuple(f"{name}_{part}" for name in self.calendar for part in ("sin", "cos"))
         missing = tuple(f"{name}_missing" for name in self.history)
-        return (self.boolean, *self.continuous, *cyclic, *missing)
+        return (*self.continuous, *cyclic, *missing)
 
     def to_dict(self) -> dict:
         data = asdict(self)

@@ -41,7 +41,9 @@ original transaction fields, it adds:
 - **Recurring-family history:** time since the previous similar transaction, prior
   count, typical interval, interval variation, typical amount, and amount versus the
   client's usual amount.
-- **Candidate signals:** a possible recurring family and a recurring-candidate flag.
+- **Candidate signal:** a possible recurring merchant family. The embedding schema
+  does not add a separate recurring-candidate flag because it would duplicate
+  whether this family is `none`.
 
 These features give a future model context that a raw amount and description cannot
 provide. For example, a payment may look normal by value but unusual because it
