@@ -44,6 +44,94 @@ Linear(115, 128) -> GELU -> LayerNorm -> Dropout(0.1)
 -> Linear(128, 128) -> LayerNorm
 ```
 
+## How transactions become one ordered sequence per client
+
+Yes: the code keeps every client's transactions together and orders them from the
+oldest timestamp to the newest timestamp.
+
+The process is:
+
+1. Read all transaction rows.
+2. Group rows that have the same `client_id`.
+3. Inside each client, sort the rows by `timestamp` in ascending order.
+4. Embed every transaction separately into 128 numbers.
+5. Return the complete ordered list of transaction vectors for that client.
+
+For example, imagine the CSV is not ordered:
+
+```text
+CSV row order:
+client A at 12:00
+client B at 09:00
+client A at 08:00
+client A at 10:00
+```
+
+`TransactionSequenceDataset` turns it into:
+
+```text
+client A: 08:00 -> 10:00 -> 12:00
+client B: 09:00
+```
+
+One dataset item is one client, not one transaction. A batch contains several
+clients, so the model input has shape `[B, T, 128]`:
+
+- `B` is the number of clients in the batch.
+- `T` is the longest client history in that batch.
+- `128` is the number of values representing one transaction.
+
+Clients rarely have the same number of transactions, so shorter histories are
+padded with empty positions:
+
+```text
+client A: tx1 -> tx2 -> tx3 -> PAD -> PAD
+client B: tx1 -> tx2 -> tx3 -> tx4 -> tx5
+```
+
+The returned `padding_mask` is `False` for a real transaction and `True` for `PAD`.
+The sequence model must use this mask so it ignores the empty positions. The encoder
+also forces the 128d output at padded positions to zero.
+
+Using `DataLoader(..., shuffle=True)` only changes which **clients** are placed in
+each batch. It never changes the transaction order inside a client. `client_id` is
+kept as grouping metadata and is never converted into a learned feature.
+
+By default, `TransactionSequenceDataset(rows)` keeps the full history. If
+`max_length=256` is supplied, a client with more than 256 transactions keeps only
+its latest 256 transactions, still in oldest-to-newest order. Leave `max_length`
+unset when every transaction must be passed to the sequence model and memory allows
+it.
+
+The supplied train, validation, and test files contain separate clients: there is
+no client overlap between the three splits. Each split is therefore grouped and
+ordered independently without losing an earlier part of the same client's history.
+
+### How this supports forecasting the next transaction
+
+This module prepares the ordered input, but the later sequence model performs the
+forecast. During training, a client's sequence is shifted by one position:
+
+```text
+known input:     transaction 1 -> transaction 2 -> transaction 3
+desired target: transaction 2 -> transaction 3 -> transaction 4
+```
+
+At the first position the model learns to predict transaction 2 from transaction 1.
+At the second position it predicts transaction 3 from transactions 1 and 2. At
+inference time, give it every known transaction for one client and use the final
+real position to forecast that client's next transaction.
+
+The later sequence model must use a **causal mask** as well as the padding mask:
+
+- The padding mask hides empty `PAD` positions.
+- The causal mask stops an earlier position from looking at a later real
+  transaction and accidentally learning the answer.
+
+The current embedding code returns the ordered vectors and padding mask. Creating
+shifted targets and applying the causal mask belong in the forecasting model or its
+training loop; they are intentionally not faked inside the feature encoder.
+
 ## Leakage protection
 
 Only `train_features.csv` is allowed to create category dictionaries and numeric
@@ -132,7 +220,8 @@ from txembed import (
 
 preprocessor = TransactionPreprocessor.load("artifacts/preprocessor.json")
 rows = PreprocessedTransactions.load_npz("artifacts/train.npz")
-dataset = TransactionSequenceDataset(rows, max_length=256)
+# Omitting max_length keeps every transaction for each client.
+dataset = TransactionSequenceDataset(rows)
 loader = DataLoader(
     dataset,
     batch_size=32,
