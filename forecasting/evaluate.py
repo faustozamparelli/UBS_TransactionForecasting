@@ -75,7 +75,7 @@ def main() -> None:
             actual.extend(batch.labels.tolist())
 
     label_indices = list(range(len(LABEL_NAMES)))
-    accuracy = sum(p == a for p, a in zip(predicted, actual, strict=True)) / len(actual)
+    accuracy = sum(p == a for p, a in zip(predicted, actual)) / len(actual)
     macro_f1 = f1_score(
         actual, predicted, labels=label_indices, average="macro", zero_division=0
     )
@@ -86,7 +86,7 @@ def main() -> None:
     print(
         f"{args.split}: n={len(actual)} accuracy={accuracy:.3f} macro_f1={macro_f1:.3f}"
     )
-    for name, score in zip(LABEL_NAMES, per_class_f1, strict=True):
+    for name, score in zip(LABEL_NAMES, per_class_f1):
         print(f"  {name:<10} f1={score:.3f}")
 
 

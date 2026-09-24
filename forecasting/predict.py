@@ -72,7 +72,7 @@ def main() -> None:
             logits = model(batch)
             labels = [LABEL_NAMES[index] for index in logits.argmax(dim=-1).tolist()]
             batch_client_ids = sequences.client_ids[offset : offset + len(labels)]
-            for client_id, label in zip(batch_client_ids, labels, strict=True):
+            for client_id, label in zip(batch_client_ids, labels):
                 predictions[client_id] = label
             offset += len(labels)
 

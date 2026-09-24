@@ -202,7 +202,6 @@ class TransactionPreprocessor:
             self.schema.calendar,
             self.schema.calendar_periods,
             self.schema.calendar_offsets,
-            strict=True,
         ):
             values = pd.to_numeric(frame[name], errors="raise").to_numpy(dtype=np.float64)
             if not np.isfinite(values).all():

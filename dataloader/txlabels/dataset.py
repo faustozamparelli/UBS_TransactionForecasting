@@ -47,7 +47,7 @@ class TransactionForecastingDataset(Dataset[tuple[TransactionSequence, int]]):
 def collate_forecasting_batch(
     items: list[tuple[TransactionSequence, int]],
 ) -> ForecastingBatch:
-    sequences, labels = zip(*items, strict=True)
+    sequences, labels = zip(*items)
     return ForecastingBatch(
         transactions=collate_transaction_sequences(list(sequences)),
         labels=torch.tensor(labels, dtype=torch.long),

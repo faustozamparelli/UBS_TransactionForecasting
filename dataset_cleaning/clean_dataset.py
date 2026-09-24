@@ -125,7 +125,7 @@ def clean_transactions(frame: pd.DataFrame) -> pd.DataFrame:
     result["candidate_family"] = [
         classify_transaction(mcc, description, amount)
         for mcc, description, amount in zip(
-            result["mcc"], result["description"], result["amount"], strict=True
+            result["mcc"], result["description"], result["amount"]
         )
     ]
     result["day_of_week"] = result["timestamp"].dt.dayofweek

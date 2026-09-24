@@ -42,6 +42,6 @@ def load_labels(
     return {
         str(client_id): label_to_index(str(label).strip())
         for client_id, label in zip(
-            frame[client_column], frame[label_column], strict=True
+            frame[client_column], frame[label_column]
         )
     }
