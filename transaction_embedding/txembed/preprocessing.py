@@ -162,7 +162,7 @@ class TransactionPreprocessor:
         if payload.get("version") != 2:
             raise ValueError(
                 f"Unsupported preprocessing artifact version: {payload.get('version')}. "
-                "Regenerate cleaned and uncleaned artifacts with the current scripts."
+                "Regenerate the uncleaned artifacts with the current script."
             )
         instance = cls(FeatureSchema.from_dict(payload["schema"]))
         instance.vocabularies = payload["vocabularies"]

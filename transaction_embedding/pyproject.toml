@@ -14,9 +14,5 @@ dependencies = [
     "sentence-transformers>=3.0",
 ]
 
-[project.optional-dependencies]
-dev = ["pytest>=8"]
-
 [tool.setuptools]
 packages = ["txembed"]
-
