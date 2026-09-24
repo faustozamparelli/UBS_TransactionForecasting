@@ -15,45 +15,6 @@ from experiment import pair_probabilities, probabilities_in_label_order
 from features import FAMILIES, LABELS, build_feature_tables
 
 
-def neural_probabilities(
-    artifact_dir: Path,
-    checkpoint: Path,
-    device_name: str,
-    batch_size: int,
-    max_length: int,
-) -> dict[str, np.ndarray]:
-    import torch
-    from torch.utils.data import DataLoader
-    from txembed import (
-        PreprocessedTransactions,
-        TransactionPreprocessor,
-        TransactionSequenceDataset,
-        collate_transaction_sequences,
-    )
-
-    from neural_model import TemporalGRUForecastModel
-
-    device = torch.device(device_name)
-    preprocessor = TransactionPreprocessor.load(artifact_dir / "preprocessor.json")
-    model = TemporalGRUForecastModel.from_preprocessor(preprocessor).to(device)
-    model.load_state_dict(torch.load(checkpoint, map_location=device, weights_only=True))
-    model.eval()
-    rows = PreprocessedTransactions.load_npz(artifact_dir / "test.npz")
-    sequences = TransactionSequenceDataset(rows, max_length=max_length)
-    loader = DataLoader(
-        sequences,
-        batch_size=batch_size,
-        shuffle=False,
-        collate_fn=collate_transaction_sequences,
-    )
-    output: list[np.ndarray] = []
-    with torch.inference_mode():
-        for batch in loader:
-            batch = batch.to(device)
-            output.append(torch.softmax(model(batch), dim=-1).cpu().numpy())
-    return dict(zip(sequences.client_ids, np.concatenate(output), strict=True))
-
-
 def main() -> None:
     repository = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description="Create a submission from the optimized ensemble")
@@ -76,29 +37,10 @@ def main() -> None:
     parser.add_argument(
         "--output-csv", type=Path, default=Path(__file__).parent / "submission_optimized.csv"
     )
-    parser.add_argument("--batch-size", type=int, default=48)
-    parser.add_argument("--max-length", type=int, default=128)
-    parser.add_argument("--device", default="cpu")
-    parser.add_argument("--neural-cache-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--embedding-pool-cache-only", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
-    neural_cache = args.artifact_dir / "neural_test_probabilities.npz"
     embedding_cache = args.artifact_dir / "embedding_pool_test_features.npz"
-    if args.neural_cache_only:
-        values = neural_probabilities(
-            args.embedding_dir,
-            args.artifact_dir / "neural_model.pt",
-            args.device,
-            args.batch_size,
-            args.max_length,
-        )
-        np.savez_compressed(
-            neural_cache,
-            client_ids=np.asarray(list(values), dtype=str),
-            probabilities=np.stack(list(values.values())),
-        )
-        return
     if args.embedding_pool_cache_only:
         from txembed import TransactionPreprocessor
 
@@ -119,13 +61,21 @@ def main() -> None:
     frame = pd.read_csv(args.feature_csv)
     wide, pairs = build_feature_tables(frame, client_ids)
 
-    bundle = joblib.load(args.artifact_dir / "model.joblib")
+    final_model_path = args.artifact_dir / "model_final.joblib"
+    bundle = joblib.load(
+        final_model_path if final_model_path.exists() else args.artifact_dir / "model.joblib"
+    )
     wide = wide.reindex(columns=bundle["wide_columns"])
     pairs = pairs.reindex(columns=bundle["pair_columns"])
     catboost = probabilities_in_label_order(bundle["catboost_multiclass_model"], wide)
     pair = as_distribution(pair_probabilities(bundle["pair_model"], pairs).to_numpy())
 
-    family_bundle = joblib.load(args.artifact_dir / "family_models.joblib")
+    final_family_path = args.artifact_dir / "family_models_final.joblib"
+    family_bundle = joblib.load(
+        final_family_path
+        if final_family_path.exists()
+        else args.artifact_dir / "family_models.joblib"
+    )
     family_scores = np.zeros((len(client_ids), len(FAMILIES)), dtype=np.float64)
     for column, family_name in enumerate(FAMILIES):
         family_features = pairs.xs(family_name, level="family").reindex(client_ids)
@@ -135,36 +85,12 @@ def main() -> None:
         )[:, 1]
     family = as_distribution(family_scores)
 
-    if not neural_cache.exists():
-        subprocess.run(
-            [
-                sys.executable,
-                str(Path(__file__).resolve()),
-                "--embedding-dir",
-                str(args.embedding_dir),
-                "--artifact-dir",
-                str(args.artifact_dir),
-                "--device",
-                args.device,
-                "--batch-size",
-                str(args.batch_size),
-                "--max-length",
-                str(args.max_length),
-                "--neural-cache-only",
-            ],
-            check=True,
-        )
-    with np.load(neural_cache) as data:
-        neural_by_client = dict(zip(data["client_ids"].astype(str), data["probabilities"], strict=True))
-    neural = np.stack([neural_by_client[client_id] for client_id in client_ids])
-
     configuration = json.loads((args.artifact_dir / "blend_config.json").read_text())
     weights = configuration["weights"]
     probabilities = (
         weights["catboost"] * catboost
         + weights["pair"] * pair
         + weights["family"] * family
-        + weights["neural"] * neural
     )
 
     extra_sources: dict[str, np.ndarray] = {}

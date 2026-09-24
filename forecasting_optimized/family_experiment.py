@@ -78,6 +78,46 @@ def main() -> None:
         {"models": models, "columns": columns, "threshold": threshold},
         args.output_dir / "family_models.joblib",
     )
+    # Keep validation diagnostics above, then refit the frozen per-family model
+    # settings on all labeled clients for final inference.
+    combined_labels = pd.concat([train_labels, valid_labels], ignore_index=True)
+    combined_targets = combined_labels.set_index("client_id")[
+        "target_next_recurring_merchant"
+    ]
+    combined_frame = pd.concat(
+        [
+            pd.read_csv(args.feature_dir / "train_features.csv"),
+            pd.read_csv(args.feature_dir / "valid_features.csv"),
+        ],
+        ignore_index=True,
+    )
+    _, combined_pairs = build_feature_tables(combined_frame, combined_labels["client_id"])
+    combined_pairs = combined_pairs.reindex(columns=columns)
+    for family in FAMILIES:
+        family_rows = combined_pairs.xs(family, level="family").reindex(
+            combined_labels["client_id"]
+        )
+        binary = (combined_targets.reindex(combined_labels["client_id"]) == family).astype(int)
+        iterations = max(1, int(models[family].get_best_iteration()) + 1)
+        final_model = CatBoostClassifier(
+            loss_function="Logloss",
+            eval_metric="AUC",
+            iterations=iterations,
+            learning_rate=0.035,
+            depth=6,
+            l2_leaf_reg=6.0,
+            random_strength=0.7,
+            auto_class_weights="Balanced",
+            random_seed=2026,
+            allow_writing_files=False,
+            verbose=False,
+        )
+        final_model.fit(family_rows, binary, verbose=False)
+        models[family] = final_model
+    joblib.dump(
+        {"models": models, "columns": columns, "threshold": threshold},
+        args.output_dir / "family_models_final.joblib",
+    )
     np.savez_compressed(
         args.output_dir / "family_valid_probabilities.npz",
         client_ids=np.asarray(probabilities.index, dtype=str),

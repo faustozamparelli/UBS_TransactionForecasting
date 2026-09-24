@@ -263,6 +263,53 @@ def main() -> None:
         blend_predictions,
     )
 
+    # Validation above selects and reports the frozen configuration. The artifacts
+    # used by predict.py are then refit on every labeled client so validation
+    # examples contribute to hidden-test inference.
+    combined_targets = pd.concat([train_targets, valid_targets])
+    combined_frame = pd.concat([train, valid], ignore_index=True)
+    combined_wide, combined_pairs = build_feature_tables(
+        combined_frame, combined_targets.index
+    )
+    combined_wide = combined_wide.reindex(columns=train_wide.columns)
+    combined_pairs = combined_pairs.reindex(columns=train_pairs.columns)
+    selected_iterations = max(1, int(catboost_multiclass.get_best_iteration()) + 1)
+    final_catboost = CatBoostClassifier(
+        loss_function="MultiClass",
+        iterations=selected_iterations,
+        learning_rate=0.035,
+        depth=7,
+        l2_leaf_reg=5.0,
+        random_strength=0.5,
+        auto_class_weights="Balanced",
+        random_seed=2026,
+        allow_writing_files=False,
+        verbose=False,
+    )
+    final_catboost.fit(combined_wide, combined_targets.loc[combined_wide.index])
+    combined_pair_targets = np.asarray(
+        [combined_targets[client_id] == family for client_id, family in combined_pairs.index],
+        dtype=np.int8,
+    )
+    final_pair_model = make_pipeline(
+        SimpleImputer(strategy="constant", fill_value=-1.0, add_indicator=True),
+        HistGradientBoostingClassifier(
+            learning_rate=0.055,
+            max_iter=350,
+            max_leaf_nodes=23,
+            min_samples_leaf=18,
+            l2_regularization=1.0,
+            random_state=2026,
+        ),
+    )
+    final_pair_model.fit(
+        combined_pairs,
+        combined_pair_targets,
+        histgradientboostingclassifier__sample_weight=compute_sample_weight(
+            "balanced", combined_pair_targets
+        ),
+    )
+
     bundle = {
         "catboost_multiclass_model": catboost_multiclass,
         "pair_model": pair_model,
@@ -274,6 +321,12 @@ def main() -> None:
         "blend_threshold": blend_threshold,
     }
     joblib.dump(bundle, args.output_dir / "model.joblib")
+    final_bundle = {
+        **bundle,
+        "catboost_multiclass_model": final_catboost,
+        "pair_model": final_pair_model,
+    }
+    joblib.dump(final_bundle, args.output_dir / "model_final.joblib")
     metrics = {
         "multiclass_macro_f1": multiclass_score,
         "catboost_multiclass_macro_f1": catboost_score,

@@ -7,7 +7,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.metrics import classification_report, f1_score
+from sklearn.metrics import accuracy_score, classification_report, f1_score
 
 from experiment import pair_probabilities, probabilities_in_label_order
 from features import FAMILIES, LABELS, build_feature_tables
@@ -88,45 +88,22 @@ def main() -> None:
         }
     family = as_distribution(np.stack([family_by_client[client_id] for client_id in wide.index]))
 
-    with np.load(args.artifact_dir / "neural_valid_probabilities.npz") as neural_data:
-        neural_by_client = {
-            str(client_id): probabilities
-            for client_id, probabilities in zip(
-                neural_data["client_ids"], neural_data["probabilities"], strict=True
-            )
-        }
-    neural = np.stack([neural_by_client[client_id] for client_id in wide.index])
     actual = target_by_client.loc[wide.index].to_numpy()
-
-    best = (-1.0, (0.0, 0.0, 0.0, 0.0), np.zeros(len(LABELS)), catboost)
-    for catboost_weight in np.linspace(0.0, 1.0, 11):
-        for pair_weight in np.linspace(0.0, 1.0 - catboost_weight, 11):
-            remaining = 1.0 - catboost_weight - pair_weight
-            for family_share in np.linspace(0.0, 1.0, 6):
-                family_weight = remaining * family_share
-                neural_weight = remaining - family_weight
-                probabilities = (
-                    catboost_weight * catboost
-                    + pair_weight * pair
-                    + family_weight * family
-                    + neural_weight * neural
-                )
-                offsets, score = tune_offsets(actual, probabilities)
-                if score > best[0]:
-                    best = (
-                        score,
-                        (
-                            float(catboost_weight),
-                            float(pair_weight),
-                            float(family_weight),
-                            float(neural_weight),
-                        ),
-                        offsets,
-                        probabilities,
-                    )
-
-    score, weights, offsets, probabilities = best
-    extra_weights: dict[str, float] = {}
+    weights = {"catboost": 0.314, "pair": 0.601, "family": 0.085}
+    probabilities = (
+        weights["catboost"] * catboost
+        + weights["pair"] * pair
+        + weights["family"] * family
+    )
+    extra_weights = {
+        "stacking": 0.272,
+        "proxy_catboost": 0.181,
+        "proxy_pair": 0.151,
+        "xgboost_pair": 0.296,
+        "ranking": 0.203,
+        "embedding_pool": 0.479,
+        "description_stream": 0.161,
+    }
     extra_sources: dict[str, np.ndarray] = {}
     stacking_path = args.artifact_dir / "stacking_valid_probabilities.npz"
     if stacking_path.exists():
@@ -198,25 +175,16 @@ def main() -> None:
             [description_by_client[client_id] for client_id in wide.index]
         )
 
-    for source_name, source_probabilities in extra_sources.items():
-        source_best = (score, 0.0, offsets, probabilities)
-        for source_weight in np.linspace(0.02, 0.5, 25):
-            candidate_probabilities = (
-                (1 - source_weight) * probabilities
-                + source_weight * source_probabilities
-            )
-            candidate_offsets, candidate_score = tune_offsets(
-                actual, candidate_probabilities
-            )
-            if candidate_score > source_best[0]:
-                source_best = (
-                    candidate_score,
-                    float(source_weight),
-                    candidate_offsets,
-                    candidate_probabilities,
-                )
-        if source_best[1] > 0:
-            score, extra_weights[source_name], offsets, probabilities = source_best
+    missing_sources = sorted(set(extra_weights) - set(extra_sources))
+    if missing_sources:
+        raise FileNotFoundError(
+            f"Missing validation probabilities for frozen sources: {missing_sources}"
+        )
+    for source_name, source_weight in extra_weights.items():
+        probabilities = (
+            (1 - source_weight) * probabilities
+            + source_weight * extra_sources[source_name]
+        )
 
     # A small second-stage calibration lets a specialist affect only the class it
     # ranks well. The values are deliberately restricted and applied only when the
@@ -231,9 +199,9 @@ def main() -> None:
             "software": -0.20,
             "streaming": -0.025,
         },
-        "ranking": {"mobile": 0.025, "software": 0.025, "streaming": 0.05},
+        "ranking": {"mobile": 0.025, "streaming": 0.05},
         "embedding_pool": {"cloud": 0.075, "mobile": 0.175, "streaming": 0.475},
-        "description_stream": {"cloud": -0.025, "streaming": 0.05},
+        "description_stream": {"streaming": 0.05},
     }
     class_adjustments: list[dict[str, float | str]] = []
     for source_name, adjustments in proposed_adjustments.items():
@@ -242,25 +210,23 @@ def main() -> None:
         source_probabilities = extra_sources[source_name]
         for label, weight in adjustments.items():
             column = LABELS.index(label)
-            candidate_probabilities = probabilities.copy()
-            candidate_probabilities[:, column] = (
+            probabilities[:, column] = (
                 (1 - weight) * probabilities[:, column]
                 + weight * source_probabilities[:, column]
             )
-            candidate_probabilities = np.clip(candidate_probabilities, 1e-7, None)
-            candidate_probabilities /= candidate_probabilities.sum(axis=1, keepdims=True)
-            candidate_offsets, candidate_score = tune_offsets(actual, candidate_probabilities)
-            if candidate_score > score + 1e-9:
-                score = candidate_score
-                probabilities = candidate_probabilities
-                offsets = candidate_offsets
-                class_adjustments.append(
-                    {"source": source_name, "label": label, "weight": weight}
-                )
+            probabilities = np.clip(probabilities, 1e-7, None)
+            probabilities /= probabilities.sum(axis=1, keepdims=True)
+            class_adjustments.append(
+                {"source": source_name, "label": label, "weight": weight}
+            )
 
+    offsets = np.asarray([0.425, 0.4, 0.4, 0.45, 0.65, 0.0, 0.525, -0.4])
     predicted = (np.log(np.clip(probabilities, 1e-7, 1.0)) + offsets).argmax(axis=1)
+    score = macro_f1(actual, probabilities, offsets)
+    accuracy = accuracy_score(actual, predicted)
     print(f"best blended validation macro_f1={score:.4f}")
-    print(f"weights catboost/pair/family/neural={weights}")
+    print(f"validation accuracy={accuracy:.4f}")
+    print(f"weights={weights}")
     print(f"extra sequential blend weights={extra_weights}")
     print(f"class-specific adjustments={class_adjustments}")
     print(f"class offsets={dict(zip(LABELS, offsets.round(3), strict=True))}")
@@ -276,9 +242,8 @@ def main() -> None:
     )
     configuration = {
         "macro_f1": score,
-        "weights": dict(
-            zip(("catboost", "pair", "family", "neural"), weights, strict=True)
-        ),
+        "accuracy": accuracy,
+        "weights": weights,
         "class_offsets": dict(zip(LABELS, offsets.tolist(), strict=True)),
         "extra_weights": extra_weights,
         "class_adjustments": class_adjustments,

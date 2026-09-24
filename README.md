@@ -23,10 +23,39 @@ specialists look at merchant-like streams. Their scores are blended and then adj
 so that rare classes are not automatically ignored.
 
 On the fixed 1,000-client validation set, it gets 637 clients exactly right and has a
-macro-F1 of **0.6160**. The previous attention model scored about **0.440** macro-F1
+macro-F1 of **0.6163**. The previous attention model scored about **0.440** macro-F1
 on the same split. That is strong evidence that the new design fits this task better.
-It is not yet clean proof that it will score 0.6160 on new clients, because the
+It is not yet clean proof that it will score 0.6163 on new clients, because the
 validation labels were also used to choose and calibrate many parts of the ensemble.
+
+## Python environment
+
+The project environment is `.venv` at the repository root:
+
+```text
+/Users/faustozamparelli/Developer/UBS/.venv
+```
+
+Use its interpreter directly for the structured forecasting workflow:
+
+```bash
+.venv/bin/python forecasting_optimized/experiment.py
+```
+
+To add the remaining dependencies for the full ensemble, reuse this environment:
+
+```bash
+uv pip install --python .venv/bin/python -r requirements.txt
+```
+
+It currently contains CatBoost, pandas, scikit-learn, NumPy, SciPy, and their
+dependencies. System Python separately provides NumPy and PyTorch under
+`/opt/homebrew/lib/python3.14/site-packages` and
+`/opt/homebrew/opt/pytorch/libexec/lib/python3.14/site-packages`.
+
+The full embedding and XGBoost ensemble also needs the remaining packages in
+`requirements.txt`; install them into this same `.venv` when running those parts,
+not into another environment.
 
 ## First: what is a recurring payment?
 
@@ -85,7 +114,7 @@ transactions before the cutoff
           |                            |
           |                            +--> several tree models
           |
-          +--> raw-description embeddings --> GRU and pooled-embedding models
+          +--> raw-description embeddings --> pooled-embedding model
                                                |
 all model probability tables -----------------+
           |
@@ -196,23 +225,14 @@ with weight 0.56.
 Seven binary CatBoost models are trained, one per family. They can learn that regular
 insurance may behave differently from weekly or monthly entertainment payments.
 
-### 4. Temporal GRU
-
-The GRU reads the ordered transaction embeddings. It can use information that summary
-statistics flatten away. It combines three summaries of its hidden sequence:
-attention-weighted history, mean history, and the last state.
-
-Its standalone prediction is not the strongest, but a weaker model can still improve
-an ensemble when it makes different mistakes.
-
-### 5. Out-of-fold stack
+### 4. Out-of-fold stack
 
 The stack learns from pair-model and CatBoost predictions. Its training predictions
 are out-of-fold: each training client is predicted by base models that did not train
 on that client. This prevents the stack from learning from unrealistically perfect
 in-sample predictions.
 
-### 6. Historical proxy models
+### 5. Historical proxy models
 
 Unlabeled histories are turned into approximate supervised examples at three earlier
 cutoffs: 2025-08-01, 2025-09-01, and 2025-10-01. A future payment is treated as a
@@ -221,7 +241,7 @@ stable amount, and acceptable phase error.
 
 These labels are noisy, so real labeled examples receive four times their weight.
 
-### 7. XGBoost pair model and family ranker
+### 6. XGBoost pair model and family ranker
 
 The extra pair model provides a different tree-learning bias. The ranker separates
 two questions:
@@ -232,7 +252,7 @@ two questions:
 This matches the logical structure of the task better than forcing one model to solve
 both questions at once.
 
-### 8. Pooled embeddings and description streams
+### 7. Pooled embeddings and description streams
 
 The pooled-embedding model summarizes raw-description embeddings over the full and
 recent history. The description-stream specialist scores recurrence after grouping
@@ -244,10 +264,9 @@ features miss information in the text.
 The initial probability table is:
 
 ```text
-P = 0.300 * CatBoost
-  + 0.560 * shared pair model
-  + 0.084 * family-specific models
-  + 0.056 * temporal GRU
+P = 0.314 * CatBoost
+  + 0.601 * shared pair model
+  + 0.085 * family-specific models
 ```
 
 Those weights sum to one. Extra sources are then added one at a time using:
@@ -256,9 +275,9 @@ Those weights sum to one. Extra sources are then added one at a time using:
 P_new = (1 - w) * P_old + w * P_specialist
 ```
 
-The saved sequential weights are 0.28 for stacking, 0.16 for proxy CatBoost, 0.14 for
-the proxy pair model, 0.28 for the XGBoost pair model, 0.20 for ranking, 0.48 for
-pooled embeddings, and 0.16 for description streams.
+The saved sequential weights are 0.272 for stacking, 0.181 for proxy CatBoost, 0.151
+for the proxy pair model, 0.296 for the XGBoost pair model, 0.203 for ranking, 0.479
+for pooled embeddings, and 0.161 for description streams.
 
 These numbers must **not** be read as final global percentages because every later
 step shrinks the mixture produced by earlier steps. Some classes then receive small
@@ -310,19 +329,19 @@ The frozen validation prediction file contains 1,000 clients:
 
 | Class | Support | Precision | Recall | F1 |
 |---|---:|---:|---:|---:|
-| cloud | 89 | 0.624 | 0.652 | 0.637 |
-| gym | 121 | 0.630 | 0.802 | 0.705 |
+| cloud | 89 | 0.621 | 0.663 | 0.641 |
+| gym | 121 | 0.627 | 0.793 | 0.701 |
 | insurance | 99 | 0.589 | 0.667 | 0.626 |
-| mobile | 104 | 0.591 | 0.721 | 0.649 |
-| music | 93 | 0.435 | 0.505 | 0.468 |
-| software | 104 | 0.671 | 0.548 | 0.603 |
-| streaming | 97 | 0.552 | 0.495 | 0.522 |
-| none | 293 | 0.808 | 0.645 | 0.717 |
+| mobile | 104 | 0.595 | 0.721 | 0.652 |
+| music | 93 | 0.439 | 0.505 | 0.470 |
+| software | 104 | 0.663 | 0.548 | 0.600 |
+| streaming | 97 | 0.558 | 0.495 | 0.525 |
+| none | 293 | 0.804 | 0.645 | 0.716 |
 
 The totals are:
 
 - accuracy: **0.637** (637 of 1,000 clients);
-- macro-F1: **0.6160**;
+- macro-F1: **0.6163**;
 - previous uncleaned attention model: approximately **0.440 macro-F1**;
 - absolute improvement: about **0.176**;
 - relative improvement: about **40%** (`0.176 / 0.440`).
@@ -337,7 +356,7 @@ This supports three conclusions:
 
 ### What the result does not prove
 
-It does not prove that unseen-test macro-F1 is 0.6160. The validation set influenced:
+It does not prove that unseen-test macro-F1 is 0.6163. The validation set influenced:
 
 - early stopping in several base models;
 - candidate model and hyperparameter selection;
@@ -353,7 +372,7 @@ helped construct the final decision rule. These are two different meanings of
 
 The honest description is therefore:
 
-> The ensemble achieved a calibrated macro-F1 of 0.6160 on the development
+> The ensemble achieved a calibrated macro-F1 of 0.6163 on the development
 > validation set. Its unbiased generalization score still needs confirmation.
 
 ## Where the model still fails
@@ -367,9 +386,9 @@ The validation errors show useful patterns:
 - the model over-predicts merchant classes relative to `none`: it finds only 189 of
   293 real `none` cases. This is partly a deliberate consequence of macro-F1
   calibration.
-- `software` has good precision (0.671) but weaker recall (0.548), meaning its
+- `software` has good precision (0.663) but weaker recall (0.548), meaning its
   predictions are fairly trustworthy but many real software cases are missed.
-- `gym` has high recall (0.802) but lower precision (0.630), meaning it catches most
+- `gym` has high recall (0.793) but lower precision (0.627), meaning it catches most
   gyms while also calling too many other clients gym.
 
 Those are more actionable than the single 0.616 number.
@@ -617,7 +636,6 @@ ones:
 ```bash
 python forecasting_optimized/experiment.py
 python forecasting_optimized/family_experiment.py
-python forecasting_optimized/train_neural.py
 python forecasting_optimized/stacking_experiment.py
 python forecasting_optimized/proxy_pretrain_experiment.py
 python forecasting_optimized/xgboost_experiment.py
@@ -629,7 +647,13 @@ python forecasting_optimized/blend_models.py
 
 The scripts write generated models, probability tables, and the frozen blend
 configuration under `forecasting_optimized/artifacts/`. Training is CPU-intensive;
-the embedding and GRU stages can use an available accelerator.
+the embedding generation stage can use an available accelerator.
+
+Validation artifacts remain trained on `train` only so the reported score stays
+held out. After model choices and iteration counts are frozen, the main structured
+models and seven family specialists are also refit on `train + valid` and saved as
+`model_final.joblib` and `family_models_final.joblib`. Submission inference prefers
+those 3,000-client final artifacts.
 
 ### 5. Create the submission
 
@@ -638,12 +662,7 @@ python forecasting_optimized/predict.py
 ```
 
 The output is `forecasting_optimized/submission_optimized.csv`, with the same client
-order and schema as `data/dataset/sample_submission.csv`. To run the GRU prediction
-on an accelerator, for example, use:
-
-```bash
-python forecasting_optimized/predict.py --device mps
-```
+order and schema as `data/dataset/sample_submission.csv`.
 
 All extracted data, embeddings, trained artifacts, caches, and the generated
 submission are ignored by Git and can be regenerated with the commands above.
