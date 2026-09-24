@@ -11,8 +11,9 @@ behaviour and forecast what is likely to happen next. The long-term goal is to h
 
 ## Current status
 
-The feature dataset and transaction embedding pipeline are complete. The forecasting
-and alerting model has **not** been implemented yet.
+The feature dataset, transaction embedding pipeline, and a first recurring-merchant
+forecasting model are complete. Anomaly and phishing alerting have **not** been
+implemented yet.
 
 ```text
 raw JSONL transactions
@@ -25,7 +26,9 @@ one 128d embedding per transaction
         ↓
 transactions grouped by client and ordered by time
         ↓
-future forecasting / anomaly model (not implemented)
+attention model forecasts next recurring-merchant family (or none)
+        ↓
+anomaly / phishing alerting (not implemented)
 ```
 
 ## Dataset and added features
@@ -66,3 +69,14 @@ sorted oldest-to-newest, so a client with 80 transactions becomes `[80, 128]`.
 Training-only statistics and category dictionaries are reused for validation and
 test, preventing data leakage. See the concise implementation guide in
 [`transaction_embedding/`](transaction_embedding/README.md).
+
+## Forecasting model
+
+A single masked self-attention layer over each client's `[T, 128]` embedding
+sequence, then a learned query attends over the sequence to produce one client
+vector, which a linear layer classifies into 8 recurring-merchant classes (`cloud,
+gym, insurance, mobile, music, software, streaming, none`). Padded transactions are
+excluded from both attention steps. See
+[`forecasting/`](forecasting/README.md) for the architecture, training/evaluation/
+prediction commands, and results (macro F1 on train/validation, and a comparison
+between the cleaned and uncleaned description text).

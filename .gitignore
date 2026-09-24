@@ -5,6 +5,9 @@ data/dataset_features/
 transaction_embedding/artifacts/
 transaction_embedding/.venv/
 transaction_embedding/.pytest_cache/
+
+# Generated forecasting checkpoints
+forecasting/artifacts*/
 **/__pycache__/
 *.egg-info/
 .DS_Store
