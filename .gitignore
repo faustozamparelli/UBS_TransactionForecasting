@@ -1,6 +1,5 @@
 data/dataset/
 data/dataset_features/
-data/dataset_features.zip
 
 # Generated transaction-embedding artifacts (MiniLM cache and preprocessed arrays)
 transaction_embedding/artifacts/
