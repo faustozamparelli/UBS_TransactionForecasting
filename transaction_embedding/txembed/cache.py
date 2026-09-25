@@ -98,10 +98,10 @@ class DescriptionEmbeddingCache:
                     "INSERT OR REPLACE INTO embeddings VALUES (?, ?, ?, ?)",
                     [
                         (self._key(text), self.model_name, self.dimension, vector.tobytes())
-                        for text, vector in zip(missing, vectors)
+                        for text, vector in zip(missing, vectors, strict=True)
                     ],
                 )
-                found.update(zip(missing, vectors))
+                found.update(zip(missing, vectors, strict=True))
 
         if not texts:
             return np.empty((0, self.dimension), dtype=np.float32)

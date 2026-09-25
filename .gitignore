@@ -1,13 +1,14 @@
 data/dataset/
 data/dataset_features/
+/.venv/
 
 # Generated transaction-embedding artifacts (MiniLM cache and preprocessed arrays)
 transaction_embedding/artifacts/
-transaction_embedding/.venv/
-transaction_embedding/.pytest_cache/
 
-# Generated forecasting checkpoints
-forecasting/artifacts*/
+# Generated optimized forecasting models and predictions
+forecasting_optimized/artifacts/
+forecasting_optimized/submission_optimized.csv
+
 **/__pycache__/
 *.egg-info/
 .DS_Store
