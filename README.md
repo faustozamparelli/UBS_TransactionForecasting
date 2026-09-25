@@ -1,5 +1,17 @@
 # Predicting the next subscription: the whole pipeline
 
+**Internal validation micro-F1: 0.637** — 637 correct predictions out of 1,000
+clients. For this single-label, eight-class task, micro-F1 equals accuracy. This is
+the development validation result, not a hidden-test score; model selection and
+calibration used the same validation set. The corresponding **macro-F1 is 0.6163**.
+
+**Final submission CSV:** `forecasting_optimized/submission_optimized.csv` is the
+file produced by `python forecasting_optimized/predict.py`. It contains one row per
+test client, in the sample template's order, with exactly two columns:
+`client_id` and `predicted_next_recurring_merchant`. The second column holds one of
+the seven merchant families or `none`. The file is generated locally and ignored by
+Git; it is not a file already included in this repository.
+
 Think of the model as a detective looking at a client's bank statement. It cannot
 see the future. It can spot that a gym charge keeps arriving around the third of
 each month, distinguish that pattern from a one-off grocery trip, and guess which
