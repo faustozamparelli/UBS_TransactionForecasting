@@ -1,9 +1,28 @@
 # Predicting the next subscription: the whole pipeline
 
-**Internal validation micro-F1: 0.637** — 637 correct predictions out of 1,000
-clients. For this single-label, eight-class task, micro-F1 equals accuracy. This is
-the development validation result, not a hidden-test score; model selection and
+## Internal validation scorecard
+
+**Micro-F1: 0.637** — 637 correct predictions out of 1,000 clients. This is the
+development validation result, not a hidden-test score. Model selection and
 calibration used the same validation set. The corresponding **macro-F1 is 0.6163**.
+
+| Category | Actual clients | Correct | Predicted as category | Precision | Recall | F1 |
+|---|---:|---:|---:|---:|---:|---:|
+| cloud | 89 | 59 | 95 | 0.621 | 0.663 | 0.641 |
+| gym | 121 | 96 | 153 | 0.627 | 0.793 | 0.701 |
+| insurance | 99 | 66 | 112 | 0.589 | 0.667 | 0.626 |
+| mobile | 104 | 75 | 126 | 0.595 | 0.721 | 0.652 |
+| music | 93 | 47 | 107 | 0.439 | 0.505 | 0.470 |
+| software | 104 | 57 | 86 | 0.663 | 0.548 | 0.600 |
+| streaming | 97 | 48 | 86 | 0.558 | 0.495 | 0.525 |
+| none | 293 | 189 | 235 | 0.804 | 0.645 | 0.716 |
+| **Micro total** | **1,000** | **637** | **1,000** | **0.637** | **0.637** | **0.637** |
+
+For each row, precision means `correct / predicted as category` and recall means
+`correct / actual clients`. Across all rows, both are `637 / 1,000 = 0.637`; their
+harmonic mean is the **0.637 micro-F1**. Because every client receives exactly one
+of the eight labels, micro-F1 also equals accuracy. The per-category F1 values show
+where those 363 mistakes are concentrated.
 
 **Final submission CSV:** `forecasting_optimized/submission_optimized.csv` is the
 file produced by `python forecasting_optimized/predict.py`. It contains one row per
@@ -317,7 +336,9 @@ model does not need the best standalone score to add useful information.
 
 ## Step 5: adjust the decision for macro-F1
 
-The challenge uses macro-F1, not ordinary accuracy. For each class:
+The training and blending scripts tune macro-F1. The scorecard above also reports
+micro-F1 so the overall number of correct client predictions is immediately clear.
+For each class:
 
 ```text
 precision = correct predictions of this class / all predictions of this class
@@ -326,7 +347,7 @@ F1        = 2 * precision * recall / (precision + recall)
 macro-F1  = average of the eight class F1 values
 ```
 
-Every class gets one eighth of the final score, even though `none` has 293 validation
+Every class gets one eighth of macro-F1, even though `none` has 293 validation
 examples and `cloud` has only 89. A raw highest-probability decision tends to favor
 common classes. The code therefore adds a learned offset to each class's log score:
 
@@ -349,22 +370,12 @@ used to report the final score.
 
 ### The measured evidence
 
-The frozen validation prediction file contains 1,000 clients:
-
-| Class | Support | Precision | Recall | F1 |
-|---|---:|---:|---:|---:|
-| cloud | 89 | 0.621 | 0.663 | 0.641 |
-| gym | 121 | 0.627 | 0.793 | 0.701 |
-| insurance | 99 | 0.589 | 0.667 | 0.626 |
-| mobile | 104 | 0.595 | 0.721 | 0.652 |
-| music | 93 | 0.439 | 0.505 | 0.470 |
-| software | 104 | 0.663 | 0.548 | 0.600 |
-| streaming | 97 | 0.558 | 0.495 | 0.525 |
-| none | 293 | 0.804 | 0.645 | 0.716 |
+The [scorecard](#internal-validation-scorecard) shows every category and exactly how
+the 637 correct predictions produce the internal micro-F1.
 
 The totals are:
 
-- accuracy: **0.637** (637 of 1,000 clients);
+- micro-F1 and accuracy: **0.637** (637 of 1,000 clients);
 - macro-F1: **0.6163**;
 - previous uncleaned attention model: approximately **0.440 macro-F1**;
 - absolute improvement: about **0.176**;
