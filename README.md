@@ -2,9 +2,9 @@
 
 ## Internal validation scorecard
 
-**Micro-F1: 0.637** — 637 correct predictions out of 1,000 clients. This is the
-development validation result, not a hidden-test score. Model selection and
-calibration used the same validation set. The corresponding **macro-F1 is 0.6163**.
+**Macro-F1: 0.6163** on the 1,000-client development validation set. This is the
+final internal metric, not a hidden-test score. Model selection and calibration
+used the same validation set.
 
 | Category | Actual clients | Correct | Predicted as category | Precision | Recall | F1 |
 |---|---:|---:|---:|---:|---:|---:|
@@ -16,13 +16,12 @@ calibration used the same validation set. The corresponding **macro-F1 is 0.6163
 | software | 104 | 57 | 86 | 0.663 | 0.548 | 0.600 |
 | streaming | 97 | 48 | 86 | 0.558 | 0.495 | 0.525 |
 | none | 293 | 189 | 235 | 0.804 | 0.645 | 0.716 |
-| **Micro total** | **1,000** | **637** | **1,000** | **0.637** | **0.637** | **0.637** |
 
 For each row, precision means `correct / predicted as category` and recall means
-`correct / actual clients`. Across all rows, both are `637 / 1,000 = 0.637`; their
-harmonic mean is the **0.637 micro-F1**. Because every client receives exactly one
-of the eight labels, micro-F1 also equals accuracy. The per-category F1 values show
-where those 363 mistakes are concentrated.
+`correct / actual clients`. F1 combines the two; **macro-F1 averages the eight
+category F1 scores equally**, regardless of how many clients belong to each one.
+The headline 0.6163 uses the unrounded category scores; table values are rounded
+to three decimals.
 
 **Final submission CSV:** `forecasting_optimized/submission_optimized.csv` is the
 file produced by `python forecasting_optimized/predict.py`. It contains one row per
@@ -54,8 +53,8 @@ compares each possible family separately, one summarizes description embeddings,
 and others study merchant-like streams. Their scores are blended and then adjusted
 so that rare classes are not automatically ignored.
 
-On the fixed 1,000-client validation set, it gets 637 clients exactly right and has a
-macro-F1 of **0.6163**. The previous attention model scored about **0.440** macro-F1
+On the fixed 1,000-client validation set, it has a macro-F1 of **0.6163**. The
+previous attention model scored about **0.440** macro-F1
 on the same split. That is strong evidence that the new design fits this task better.
 It is not yet clean proof that it will score 0.6163 on new clients, because the
 validation labels were also used to choose and calibrate many parts of the ensemble.
@@ -336,9 +335,7 @@ model does not need the best standalone score to add useful information.
 
 ## Step 5: adjust the decision for macro-F1
 
-The training and blending scripts tune macro-F1. The scorecard above also reports
-micro-F1 so the overall number of correct client predictions is immediately clear.
-For each class:
+The training and blending scripts tune macro-F1. For each class:
 
 ```text
 precision = correct predictions of this class / all predictions of this class
@@ -370,12 +367,11 @@ used to report the final score.
 
 ### The measured evidence
 
-The [scorecard](#internal-validation-scorecard) shows every category and exactly how
-the 637 correct predictions produce the internal micro-F1.
+The [scorecard](#internal-validation-scorecard) shows precision, recall, and F1 for
+every category. Their equally weighted average produces the internal macro-F1.
 
 The totals are:
 
-- micro-F1 and accuracy: **0.637** (637 of 1,000 clients);
 - macro-F1: **0.6163**;
 - previous uncleaned attention model: approximately **0.440 macro-F1**;
 - absolute improvement: about **0.176**;
