@@ -7,7 +7,6 @@ transaction_embedding/artifacts/
 
 # Generated optimized forecasting models and predictions
 forecasting_optimized/artifacts/
-forecasting_optimized/submission_optimized.csv
 
 **/__pycache__/
 *.egg-info/
@@ -16,3 +15,4 @@ forecasting_optimized/submission_optimized.csv
 # Prevent massive raw data uploads
 *.jsonl
 *.csv
+!/submission.csv

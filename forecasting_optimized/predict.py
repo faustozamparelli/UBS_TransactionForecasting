@@ -35,7 +35,7 @@ def main() -> None:
     )
     parser.add_argument("--artifact-dir", type=Path, default=Path(__file__).parent / "artifacts")
     parser.add_argument(
-        "--output-csv", type=Path, default=Path(__file__).parent / "submission_optimized.csv"
+        "--output-csv", type=Path, default=repository / "submission.csv"
     )
     parser.add_argument("--embedding-pool-cache-only", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()

@@ -2,33 +2,37 @@
 
 ## Internal validation scorecard
 
-**Macro-F1: 0.6163** on the 1,000-client development validation set. This is the
-final internal metric, not a hidden-test score. Model selection and calibration
-used the same validation set.
+**Macro-F1: 0.6154** on the 1,000-client development validation set, reproduced
+from the pipeline in this repository. This is an internal development result,
+not a hidden-test score: model selection and calibration used the same validation
+set. The final offset adjustment improved this score from 0.6090 to 0.6154 without
+retraining the base models.
 
 | Category | Actual clients | Correct | Predicted as category | Precision | Recall | F1 |
 |---|---:|---:|---:|---:|---:|---:|
-| cloud | 89 | 59 | 95 | 0.621 | 0.663 | 0.641 |
-| gym | 121 | 96 | 153 | 0.627 | 0.793 | 0.701 |
-| insurance | 99 | 66 | 112 | 0.589 | 0.667 | 0.626 |
-| mobile | 104 | 75 | 126 | 0.595 | 0.721 | 0.652 |
+| cloud | 89 | 59 | 97 | 0.608 | 0.663 | 0.634 |
+| gym | 121 | 97 | 154 | 0.630 | 0.802 | 0.705 |
+| insurance | 99 | 66 | 113 | 0.584 | 0.667 | 0.623 |
+| mobile | 104 | 74 | 125 | 0.592 | 0.712 | 0.646 |
 | music | 93 | 47 | 107 | 0.439 | 0.505 | 0.470 |
-| software | 104 | 57 | 86 | 0.663 | 0.548 | 0.600 |
+| software | 104 | 57 | 84 | 0.679 | 0.548 | 0.606 |
 | streaming | 97 | 48 | 86 | 0.558 | 0.495 | 0.525 |
-| none | 293 | 189 | 235 | 0.804 | 0.645 | 0.716 |
+| none | 293 | 188 | 234 | 0.803 | 0.642 | 0.713 |
 
 For each row, precision means `correct / predicted as category` and recall means
 `correct / actual clients`. F1 combines the two; **macro-F1 averages the eight
 category F1 scores equally**, regardless of how many clients belong to each one.
-The headline 0.6163 uses the unrounded category scores; table values are rounded
+The headline 0.6154 uses the unrounded category scores; table values are rounded
 to three decimals.
 
-**Final submission CSV:** `forecasting_optimized/submission_optimized.csv` is the
-file produced by `python forecasting_optimized/predict.py`. It contains one row per
-test client, in the sample template's order, with exactly two columns:
+**Final submission CSV:** [`submission.csv`](submission.csv) is present at the
+repository root and is produced by `python forecasting_optimized/predict.py`. It
+contains one row per test client, in the sample template's order, with exactly two columns:
 `client_id` and `predicted_next_recurring_merchant`. The second column holds one of
-the seven merchant families or `none`. The file is generated locally and ignored by
-Git; it is not a file already included in this repository.
+the seven merchant families or `none`. It is committed so judges can use it without
+retraining the ensemble. The repository does **not** commit the much larger model
+artifacts, so rerunning `predict.py` from a fresh clone requires completing the
+training steps below first.
 
 Think of the model as a detective looking at a client's bank statement. It cannot
 see the future. It can spot that a gym charge keeps arriving around the third of
@@ -53,10 +57,10 @@ compares each possible family separately, one summarizes description embeddings,
 and others study merchant-like streams. Their scores are blended and then adjusted
 so that rare classes are not automatically ignored.
 
-On the fixed 1,000-client validation set, it has a macro-F1 of **0.6163**. The
-previous attention model scored about **0.440** macro-F1
-on the same split. That is strong evidence that the new design fits this task better.
-It is not yet clean proof that it will score 0.6163 on new clients, because the
+On the fixed 1,000-client validation set, it has a macro-F1 of **0.6154**. The
+earlier attention model was reported at about **0.440** macro-F1 on the same split;
+that earlier run was not reproduced here. The result suggests that this design fits
+the development task better. It does not establish the score on new clients, because the
 validation labels were also used to choose and calibrate many parts of the ensemble.
 
 ## Route map
@@ -70,12 +74,39 @@ ZIP of raw JSONL transactions + labeled client answers
     -> train specialists on train; compare and tune on validation
     -> refit the two main structured models on train + validation
     -> blend saved scores, adjust for macro-F1, predict each test client
-    -> write submission_optimized.csv in the template's client order
+    -> write submission.csv in the template's client order
 ```
 
 The exact commands are in [Run the complete pipeline](#run-the-complete-pipeline).
 The committed ZIPs let you start at the raw data or skip ahead to ready-made
 feature CSVs. Test labels are not part of the input.
+
+## How the data is used
+
+| Split | Clients | Transactions | How we use it |
+|---|---:|---:|---|
+| Train | 2,000 | 147,459 | Fit the supervised specialists, vocabulary, and numeric scaling. |
+| Validation | 1,000 | 73,898 | Choose model settings, blend weights, class adjustments, and final offsets; measure the internal score. |
+| Test | 1,000 | 75,761 | Predict one label per client for `submission.csv`; no test labels are available. |
+| Historical pretraining | Unlabeled client histories | — | Make approximate labels at earlier cutoffs to train the proxy specialists. |
+
+The raw transactions and labels live in `data/dataset.zip`; the matching prepared
+feature CSVs live in `data/dataset_features.zip`. Both archives are committed. The
+cleaning script can rebuild the feature ZIP from raw JSONL. It keeps every
+transaction, sorts by client and time, cleans description text, assigns a rough
+candidate family, and adds calendar and past-history fields. The structured
+forecasters rebuild client-level summaries from those prepared rows. The text
+specialist separately embeds the *original* descriptions, fitting numeric scales
+and category dictionaries on train only, then applying them to validation and test.
+
+The main client/family feature builder rejects transactions at or after the
+2026-01-01 cutoff. The optional historical proxy stage uses later transactions **only** to
+label earlier historical cutoffs in the unlabeled pretraining set. For the final
+test predictions, the two main structured models and seven family models are
+refit on train plus validation after their settings are chosen; the other
+specialists use their saved training-stage fits. This is why the development
+validation score and the exact models used for test inference are related but not
+identical evaluations.
 
 ## Repository in one glance
 
@@ -88,9 +119,11 @@ feature CSVs. Test labels are not part of the input.
 | `forecasting_optimized/*_experiment.py` and `experiment.py` | Train the specialists and save validation probabilities. |
 | `forecasting_optimized/blend_models.py` | Combine specialists and save the decision rule. |
 | `forecasting_optimized/predict.py` | Apply saved models to test clients and write the submission. |
+| `submission.csv` | The ready-to-submit predictions, committed at the repository root. |
 
 Each committed Python module either generates an input, trains a specialist, combines
-their outputs, or runs final inference. Generated data and models stay out of Git.
+their outputs, or runs final inference. Intermediate data and model artifacts stay
+out of Git; the final CSV is committed.
 
 ## First: what is a recurring payment?
 
@@ -353,7 +386,7 @@ adjusted_score[class] = log(probability[class]) + offset[class]
 prediction            = class with the largest adjusted_score
 ```
 
-The current offsets boost the seven merchant classes by different amounts and reduce
+The current offsets boost most merchant classes by different amounts and reduce
 `none` by 0.4. This deliberately trades some `none` recall for more predictions of
 smaller classes, which can improve macro-F1.
 
@@ -372,10 +405,9 @@ every category. Their equally weighted average produces the internal macro-F1.
 
 The totals are:
 
-- macro-F1: **0.6163**;
-- previous uncleaned attention model: approximately **0.440 macro-F1**;
-- absolute improvement: about **0.176**;
-- relative improvement: about **40%** (`0.176 / 0.440`).
+- reproduced macro-F1: **0.6154**;
+- earlier reported attention model: approximately **0.440 macro-F1**;
+- difference on this development split: about **0.175** (roughly **40%** relative).
 
 The comparison suggests three reasons for the improvement on this split:
 
@@ -387,23 +419,23 @@ The comparison suggests three reasons for the improvement on this split:
 
 ### What the result does not prove
 
-It does not prove that unseen-test macro-F1 is 0.6163. The validation set influenced:
+It does not prove that unseen-test macro-F1 is 0.6154. The validation set influenced:
 
 - early stopping in several base models;
 - candidate model and hyperparameter selection;
 - ensemble weights;
 - sequential inclusion of specialists;
 - eight class offsets;
-- class-specific adjustment acceptance.
+- class-specific adjustments.
 
-The code is **time-leakage safe** because features reject transactions on or after the
-cutoff. But the reported metric has **selection bias** because the validation labels
+The structured feature builder rejects transactions on or after the cutoff. The
+reported metric still has **selection bias** because the validation labels
 helped construct the final decision rule. These are two different meanings of
 “leakage,” and passing the first does not solve the second.
 
 The honest description is therefore:
 
-> The ensemble achieved a calibrated macro-F1 of 0.6163 on the development
+> The ensemble achieved a calibrated macro-F1 of 0.6154 on the development
 > validation set. Its unbiased generalization score still needs confirmation.
 
 ## Where the model still fails
@@ -414,15 +446,15 @@ The validation errors show useful patterns:
   mobile, streaming, and other digital subscriptions.
 - `streaming` has 48 of 97 correct and is often confused with gym, cloud, music, and
   `none`.
-- the model over-predicts merchant classes relative to `none`: it finds only 189 of
+- the model over-predicts merchant classes relative to `none`: it finds only 188 of
   293 real `none` cases. This is partly a deliberate consequence of macro-F1
   calibration.
-- `software` has good precision (0.663) but weaker recall (0.548), meaning its
+- `software` has good precision (0.679) but weaker recall (0.548), meaning its
   predictions are fairly trustworthy but many real software cases are missed.
-- `gym` has high recall (0.793) but lower precision (0.627), meaning it catches most
+- `gym` has high recall (0.802) but lower precision (0.630), meaning it catches most
   gyms while also calling too many other clients gym.
 
-Those are more actionable than the single 0.616 number.
+Those are more actionable than the single 0.6154 number.
 
 ## How to improve it, in priority order
 
@@ -553,11 +585,11 @@ Expected benefit: more stable blending and scores that other systems can safely 
 
 ### 8. Refit the entire selected pipeline on all allowed labeled data
 
-The reproducible predictor keeps the development-trained specialists. Once the
-architecture and calibration are frozen, add a complete final-training stage that
-retrains every selected base model and the cross-fitted meta-model using all allowed
-labeled data, without touching hidden labels. A partial finalizer is intentionally not
-kept because it would produce an inconsistent ensemble.
+The predictor currently refits the two main structured models and seven family
+specialists on train plus validation; its other specialists retain their
+training-stage fits. Once the architecture and calibration are frozen, a complete
+final-training stage could retrain every selected base model and the cross-fitted
+meta-model using all allowed labeled data, without touching hidden labels.
 
 Expected benefit: better use of scarce labels and consistent training provenance.
 
@@ -627,6 +659,12 @@ python -m pip install -r requirements.txt -e transaction_embedding
 On Windows PowerShell, activate the environment with
 `.venv\Scripts\Activate.ps1` instead of `source .venv/bin/activate`.
 
+The checked-in CSV was generated with Python 3.12.13, NumPy 2.5.3, pandas 3.0.6,
+scikit-learn 1.9.1, CatBoost 1.2.10, XGBoost 3.4.1,
+sentence-transformers 6.1.0, and PyTorch 2.14.0. `requirements.txt` gives compatible
+version ranges, so a fresh install may select different versions and yield a
+slightly different validation score or CSV.
+
 ### 2. Extract the input data
 
 The committed ZIP files are the source of truth. Their extracted directories are
@@ -676,15 +714,15 @@ python forecasting_optimized/description_stream_experiment.py
 python forecasting_optimized/blend_models.py
 ```
 
-The scripts write generated models, probability tables, and the frozen blend
-configuration under `forecasting_optimized/artifacts/`. Training is CPU-intensive;
-the embedding generation stage can use an available accelerator.
-
-Validation artifacts remain trained on `train` only so the reported score stays
-held out. After model choices and iteration counts are frozen, the main structured
-models and seven family specialists are also refit on `train + valid` and saved as
-`model_final.joblib` and `family_models_final.joblib`. Submission inference prefers
-those 3,000-client final artifacts.
+The scripts write generated models, probability tables, and the blend configuration
+under `forecasting_optimized/artifacts/`. Training is CPU-intensive; the embedding
+generation stage can use an available accelerator. The validation labels guide
+early stopping, model selection, blend calibration, and the reported score, so the
+score is a **development-set result**. After settings are chosen, the main
+structured models and seven family specialists are refit on `train + valid` and
+saved as `model_final.joblib` and `family_models_final.joblib`. Submission inference
+prefers those 3,000-client final artifacts; the other specialists use their saved
+training-stage fits.
 
 ### 5. Create the submission
 
@@ -692,8 +730,9 @@ those 3,000-client final artifacts.
 python forecasting_optimized/predict.py
 ```
 
-The output is `forecasting_optimized/submission_optimized.csv`, with the same client
-order and schema as `data/dataset/sample_submission.csv`.
+The output is [`submission.csv`](submission.csv) at the repository root, with the
+same client order and schema as `data/dataset/sample_submission.csv`. The checked-in
+file is already ready to submit; these commands are for reproduction.
 
-All extracted data, embeddings, trained artifacts, caches, and the generated
-submission are ignored by Git and can be regenerated with the commands above.
+Extracted data, embeddings, trained artifacts, and caches are ignored by Git. The
+final submission CSV is tracked so it is available without rebuilding the models.

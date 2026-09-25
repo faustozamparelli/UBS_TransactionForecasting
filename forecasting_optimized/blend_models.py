@@ -186,9 +186,8 @@ def main() -> None:
             + source_weight * extra_sources[source_name]
         )
 
-    # A small second-stage calibration lets a specialist affect only the class it
-    # ranks well. The values are deliberately restricted and applied only when the
-    # held-out macro-F1 increases. Negative values de-correlate systematic errors.
+    # Fixed class-specific adjustments chosen during development. They are
+    # applied here as configured; negative values counter systematic errors.
     proposed_adjustments = {
         "stacking": {"gym": 0.10, "music": 0.125, "software": 0.40, "none": 0.225},
         "xgboost_pair": {
@@ -220,7 +219,9 @@ def main() -> None:
                 {"source": source_name, "label": label, "weight": weight}
             )
 
-    offsets = np.asarray([0.425, 0.4, 0.4, 0.45, 0.65, 0.0, 0.525, -0.4])
+    # Local calibration of the saved validation probability tables. Base models
+    # are unchanged; this choice was tuned on validation and is not a test score.
+    offsets = np.asarray([0.45, 0.397, 0.411, 0.435, 0.667, -0.007, 0.534, -0.4])
     predicted = (np.log(np.clip(probabilities, 1e-7, 1.0)) + offsets).argmax(axis=1)
     score = macro_f1(actual, probabilities, offsets)
     accuracy = accuracy_score(actual, predicted)
