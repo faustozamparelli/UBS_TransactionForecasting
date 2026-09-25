@@ -1,5 +1,6 @@
 catboost>=1.2,<2
 joblib>=1.4
+lightgbm>=4.7,<5
 numpy>=1.26
 pandas>=2.1
 scikit-learn>=1.7

@@ -37,6 +37,10 @@ def main() -> None:
     parser.add_argument(
         "--output-csv", type=Path, default=repository / "submission.csv"
     )
+    parser.add_argument(
+        "--probabilities-npz", type=Path,
+        help="Optionally save pre-offset class probabilities for a second-stage blend",
+    )
     parser.add_argument("--embedding-pool-cache-only", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
@@ -198,6 +202,13 @@ def main() -> None:
         probabilities /= probabilities.sum(axis=1, keepdims=True)
 
     offsets = np.asarray([configuration["class_offsets"][label] for label in LABELS])
+    if args.probabilities_npz is not None:
+        args.probabilities_npz.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            args.probabilities_npz,
+            client_ids=client_ids.to_numpy(dtype=str),
+            probabilities=probabilities,
+        )
     predicted = (
         np.log(np.clip(probabilities, 1e-7, 1.0)) + offsets
     ).argmax(axis=1)
