@@ -1,4 +1,4 @@
-Overall challenge #2 spot winners (DueNext).
+### Overall challenge #2 spot winners (DueNext).
 <img width="908" height="726" alt="file-57462c597e4f480a058bed66c4477ebd" src="https://github.com/user-attachments/assets/b1d12b44-c8c3-49de-967e-522b8b427393" />
 
 Read the challenge here: https://github.com/Swiss-ai-Weeks/ubs-2026
