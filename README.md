@@ -1,5 +1,7 @@
 ### Overall Zurich-AI Hackathon challenge #2 spot winners (DueNext below)
-<img width="908" height="726" alt="file-57462c597e4f480a058bed66c4477ebd" src="https://github.com/user-attachments/assets/b1d12b44-c8c3-49de-967e-522b8b427393" />
+<img width="1182" height="666" alt="44A4BD6F-FCA3-400B-8952-83A5F48CD49A_1_105_c" src="https://github.com/user-attachments/assets/48f6d057-fc72-404c-bcb1-06fc5797a14f" />
+<img width="913" height="720" alt="file-d871e4221687cec416b563fc223d9dce" src="https://github.com/user-attachments/assets/c3142498-da20-4243-bde9-f386055af4d2" />
+
 
 Read the challenge here: https://github.com/Swiss-ai-Weeks/ubs-2026
 
